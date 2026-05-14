@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Google AI Studio App</title>
+    <script>
+      window.onerror = function(message, source, lineno, colno, error) {
+        var el = document.createElement('div');
+        el.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:red;color:white;z-index:9999;padding:20px;font-family:monospace;white-space:pre-wrap;';
+        el.innerText = 'Error: ' + message + '\n' + (error ? error.stack : '');
+        document.body.appendChild(el);
+      };
+      window.addEventListener('unhandledrejection', function(event) {
+        var el = document.createElement('div');
+        el.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:darkred;color:white;z-index:9999;padding:20px;font-family:monospace;white-space:pre-wrap;';
+        el.innerText = 'Promise Error: ' + (event.reason ? event.reason.stack || event.reason : 'Unknown error');
+        document.body.appendChild(el);
+      });
+    </script>
+  </head>
+  <body style="background-color: #000; color: #fff;">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
