@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../../context/AuthContext';
 import { db, handleFirestoreError, OperationType, auth } from '../../lib/firebase';
 import { collection, getDocs, query, addDoc, serverTimestamp, where, orderBy } from 'firebase/firestore';
-import { Search, Calendar, Clock, MapPin, Star, User, LogOut, CheckCircle2, ChevronRight, X, ArrowLeft, MessageSquare, Bell, SlidersHorizontal, DollarSign } from 'lucide-react';
+import { Search, Calendar, Clock, MapPin, Star, User, LogOut, CheckCircle2, ChevronRight, X, ArrowLeft, MessageSquare, Bell, SlidersHorizontal, DollarSign, Moon, Sun, Phone } from 'lucide-react';
 import { cn, formatCurrency } from '../../lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -37,6 +37,15 @@ export default function ClienteHome() {
     maxPrice: 3,
     onlyAvailable: false
   });
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
 
   useEffect(() => {
     fetchShops();
@@ -60,9 +69,9 @@ export default function ClienteHome() {
       
       if (data.length === 0) {
         const mockShops: Shop[] = [
-          { id: '1', name: 'The Royal Barber', type: 'barberia', address: 'Calle Mayor 12', rating: 4.9, description: 'Estilo clásico y moderno para el caballero exigente.', photo: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&q=80&w=800', priceRange: 2, categories: ['Corte', 'Barba'] },
-          { id: '2', name: 'Aura Beauty Studio', type: 'salon', address: 'Av. Libertad 45', rating: 4.8, description: 'Especialistas en color, estilismo y cuidado capilar avanzado.', photo: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=800', priceRange: 3, categories: ['Color', 'Tratamiento', 'Corte'] },
-          { id: '3', name: 'Gents Garage', type: 'barberia', address: 'Calle Silencio 5', rating: 4.7, description: 'Barra libre, buena música y el mejor fade de la ciudad.', photo: 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?auto=format&fit=crop&q=80&w=800', priceRange: 1, categories: ['Corte', 'Facial'] }
+          { id: '1', name: 'The Royal Barber', type: 'barberia', address: 'Calle Mayor 12', phone: '+1 829-456-7890', rating: 4.9, description: 'Estilo clásico y moderno para el caballero exigente.', photo: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&q=80&w=800', priceRange: 2, categories: ['Corte', 'Barba'] },
+          { id: '2', name: 'Aura Beauty Studio', type: 'salon', address: 'Av. Libertad 45', phone: '+1 809-123-4567', rating: 4.8, description: 'Especialistas en color, estilismo y cuidado capilar avanzado.', photo: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=800', priceRange: 3, categories: ['Color', 'Tratamiento', 'Corte'] },
+          { id: '3', name: 'Gents Garage', type: 'barberia', address: 'Calle Silencio 5', phone: '+1 829-987-6543', rating: 4.7, description: 'Barra libre, buena música y el mejor fade de la ciudad.', photo: 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?auto=format&fit=crop&q=80&w=800', priceRange: 1, categories: ['Corte', 'Facial'] }
         ];
         setShops(mockShops);
       } else {
@@ -231,6 +240,12 @@ export default function ClienteHome() {
         </div>
         
         <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setIsDarkMode(!isDarkMode)} 
+            className="p-2.5 rounded-xl bg-theme-secondary/10 text-theme-secondary hover:bg-theme-secondary/20 transition-all hidden sm:block"
+          >
+            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
           <div className="text-right hidden sm:block">
             <p className="text-sm font-bold leading-tight">{profile?.nombre}</p>
             <p className="text-[10px] text-theme-secondary font-medium uppercase tracking-tighter">Mi Cuenta</p>
@@ -475,7 +490,16 @@ export default function ClienteHome() {
                     <MessageSquare className="w-4 h-4" /> Chat
                   </button>
                 </div>
-                <p className="text-zinc-500 font-medium">{selectedShop.address}</p>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-zinc-500 font-medium">
+                    <MapPin className="w-4 h-4" /> {selectedShop.address}
+                  </div>
+                  {selectedShop.phone && (
+                    <div className="flex items-center gap-2 text-zinc-500 font-medium">
+                      <Phone className="w-4 h-4" /> {selectedShop.phone}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Works Carousel */}
@@ -654,7 +678,13 @@ export default function ClienteHome() {
           <span className="text-[8px] font-black uppercase mt-1">Inicio</span>
         </button>
         <button className="text-zinc-300 hover:text-zinc-900 transition-colors"><Calendar className="w-8 h-8" /></button>
-        <button className="text-zinc-300 hover:text-zinc-900 transition-colors"><User className="w-8 h-8" /></button>
+        <button 
+          onClick={() => setIsDarkMode(!isDarkMode)} 
+          className="text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors"
+        >
+          {isDarkMode ? <Sun className="w-8 h-8" /> : <Moon className="w-8 h-8" />}
+        </button>
+        <button className="text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors"><User className="w-8 h-8" /></button>
       </nav>
     </div>
   );

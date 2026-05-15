@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
+import { Download } from 'lucide-react';
 import { OwnerTheme } from '../ownerTheme';
 
 interface Props { theme: OwnerTheme; }
@@ -32,12 +33,37 @@ export default function EstadisticasView({ theme: t }: Props) {
   const muted  = { color: t.textMuted };
   const accent = { color: t.accent };
 
+  const handleExportReport = () => {
+    const headers = ['Mes', 'Ingresos (USD)'];
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + headers.join(",") + "\n" 
+      + MONTHLY.map(m => `${m.m},${m.v}`).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `reporte_ingresos_${t.role}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div>
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-        <p style={muted} className="text-xs font-bold uppercase tracking-widest mb-1">Métricas</p>
-        <h2 style={{ color: t.text }} className="text-3xl font-black">Estadísticas</h2>
-      </motion.div>
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+          <p style={muted} className="text-xs font-bold uppercase tracking-widest mb-1">Métricas</p>
+          <h2 style={{ color: t.text }} className="text-3xl font-black">Estadísticas</h2>
+        </motion.div>
+
+        <motion.button 
+          initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+          onClick={handleExportReport} 
+          className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all hover:scale-105"
+          style={{ background: t.accent, color: t.cardBg }}>
+          <Download size={18} />
+          <span>Exportar Reporte</span>
+        </motion.button>
+      </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Search, Star, MessageSquare, Calendar } from 'lucide-react';
+import { Search, Star, MessageSquare, Calendar, Download } from 'lucide-react';
 import { OwnerTheme, mockAppointments, mockSalonAppointments } from '../ownerTheme';
 
 interface Props { theme: OwnerTheme; }
@@ -34,6 +34,21 @@ export default function ClientesView({ theme: t }: Props) {
   const muted = { color: t.textMuted };
   const accent = { color: t.accent };
 
+  const handleExportCSV = () => {
+    const headers = ['ID', 'Nombre', 'Visitas', 'Ultima Visita', 'Gastado', 'Rating'];
+    const rows = filtered.map(c => [c.id, c.name, c.visits, c.lastVisit, c.spent, c.rating]);
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + headers.join(",") + "\n" 
+      + rows.map(e => e.join(",")).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `clientes_${t.role}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div>
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
@@ -57,12 +72,19 @@ export default function ClientesView({ theme: t }: Props) {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="relative mb-6">
-        <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2" style={muted} />
-        <input value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar cliente..." className="w-full pl-11 pr-4 py-3 rounded-xl text-sm font-medium outline-none"
-          style={{ background: t.inputBg, border: `1px solid ${t.border}`, color: t.text }} />
+      {/* Search and Export */}
+      <div className="flex gap-4 mb-6">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2" style={muted} />
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar cliente..." className="w-full pl-11 pr-4 py-3 rounded-xl text-sm font-medium outline-none transition-all focus:ring-2"
+            style={{ background: t.inputBg, border: `1px solid ${t.border}`, color: t.text, ringColor: t.accent }} />
+        </div>
+        <button onClick={handleExportCSV} className="flex items-center gap-2 px-5 rounded-xl font-bold text-sm transition-all hover:scale-105"
+          style={{ background: t.accent, color: t.cardBg }}>
+          <Download size={18} />
+          <span className="hidden sm:inline">Exportar CSV</span>
+        </button>
       </div>
 
       {/* Client table */}

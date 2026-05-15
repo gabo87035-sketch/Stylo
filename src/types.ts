@@ -8,6 +8,7 @@ export interface Shop {
   address: string;
   priceRange: 1 | 2 | 3;
   categories: string[];
+  phone?: string;
 }
 
 export interface Service {

@@ -47,6 +47,14 @@
   --theme-text: #09090b;
 }
 
+.dark {
+  --theme-primary: #D4AF37;
+  --theme-secondary: #a1a1aa;
+  --theme-accent: #00C2FF;
+  --theme-bg: #09090b !important;
+  --theme-text: #fafafa !important;
+}
+
 @layer base {
   * {
     @apply border-zinc-200;

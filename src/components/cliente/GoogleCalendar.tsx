@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays, eachDayOfInterval } from 'date-fns';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays, eachDayOfInterval, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -56,15 +56,18 @@ export default function GoogleCalendar({ selectedDate, onDateSelect }: GoogleCal
           const isSelected = selectedDate && isSameDay(day, selectedDate);
           const isCurrentMonth = isSameMonth(day, monthStart);
           const isToday = isSameDay(day, new Date());
+          const isPast = isBefore(day, startOfDay(new Date()));
 
           return (
             <button
               key={idx}
-              onClick={() => onDateSelect(day)}
+              onClick={() => !isPast && onDateSelect(day)}
+              disabled={isPast}
               className={cn(
                 "relative h-12 flex flex-col items-center justify-center rounded-2xl text-sm font-bold transition-all",
-                !isCurrentMonth && "text-zinc-300",
-                isCurrentMonth && !isSelected && "text-zinc-600 hover:bg-zinc-50",
+                isPast ? "text-zinc-300 cursor-not-allowed opacity-50" : "",
+                !isCurrentMonth && !isPast && "text-zinc-300",
+                isCurrentMonth && !isSelected && !isPast && "text-zinc-600 hover:bg-zinc-50",
                 isSelected && "bg-theme-primary text-white shadow-lg shadow-theme-primary/20",
                 isToday && !isSelected && "text-theme-primary"
               )}
