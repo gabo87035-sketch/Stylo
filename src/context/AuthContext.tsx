@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
 
 interface UserProfile {
   nombre: string;
@@ -18,7 +18,6 @@ interface AuthContextType {
   loading: boolean;
   theme: 'default' | 'feminine' | 'masculine';
   signOut: () => Promise<void>;
-  signInAsDemo: (nombre: string, telefono: string, tipo: 'cliente' | 'barbero' | 'salonera') => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -27,7 +26,6 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   theme: 'default',
   signOut: async () => {},
-  signInAsDemo: () => {},
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -39,13 +37,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const detectTheme = (name: string) => {
     const n = name.toLowerCase().trim();
     if (!n) return 'default';
-    
-    // Heuristic for Spanish names
     const femaleSuffixes = ['a', 'ia', 'ita', 'na', 'ra', 'sa', 'za', 'ie', 'is'];
     const maleSuffixes = ['o', 'os', 'an', 'el', 'on', 'er', 'ur'];
-    
-    if (femaleSuffixes.some(s => n.endsWith(s))) return 'feminine';
-    if (maleSuffixes.some(s => n.endsWith(s))) return 'masculine';
+    if (femaleSuffixes.some((s) => n.endsWith(s))) return 'feminine';
+    if (maleSuffixes.some((s) => n.endsWith(s))) return 'masculine';
     return 'default';
   };
 
@@ -57,56 +52,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [profile]);
 
-  // Load guest profile from localStorage if exists
-  useEffect(() => {
-    const guestData = localStorage.getItem('steylook_guest');
-    if (guestData && !user) {
-      setProfile(JSON.parse(guestData));
-    }
-  }, [user]);
-
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
-      
+
       if (firebaseUser) {
-        const profilePath = `users/${firebaseUser.uid}`;
+        localStorage.removeItem('steylook_guest');
         try {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           if (userDoc.exists()) {
             setProfile(userDoc.data() as UserProfile);
+          } else if (firebaseUser.displayName) {
+            setProfile({
+              nombre: firebaseUser.displayName,
+              email: firebaseUser.email || '',
+              tipo: 'cliente',
+              foto: firebaseUser.photoURL || undefined,
+            });
           } else {
-            // Check if we have a simulated profile for this user
-            const guestData = localStorage.getItem('steylook_guest');
-            if (guestData) {
-              setProfile(JSON.parse(guestData));
-            } else {
-              setProfile(null);
-            }
+            setProfile({
+              nombre: firebaseUser.email?.split('@')[0] || 'Usuario',
+              email: firebaseUser.email || '',
+              tipo: 'cliente',
+            });
           }
-        } catch (error) {
-          console.error("AuthContext: Firestore fetch failed, checking local storage fallback");
-          const guestData = localStorage.getItem('steylook_guest');
-          if (guestData) setProfile(JSON.parse(guestData));
+        } catch {
+          setProfile({
+            nombre: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuario',
+            email: firebaseUser.email || '',
+            tipo: 'cliente',
+          });
         }
+      } else {
+        setProfile(null);
       }
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
-
-  const signInAsDemo = (nombre: string, telefono: string, tipo: 'cliente' | 'barbero' | 'salonera') => {
-    const demoProfile: UserProfile = {
-      nombre,
-      telefono,
-      tipo,
-      email: `${telefono}@demo.steylook.com`,
-      foto: `https://ui-avatars.com/api/?name=${encodeURIComponent(nombre)}&background=random`
-    };
-    localStorage.setItem('steylook_guest', JSON.stringify(demoProfile));
-    setProfile(demoProfile);
-  };
 
   const signOut = async () => {
     localStorage.removeItem('steylook_guest');
@@ -115,7 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, theme, signOut, signInAsDemo }}>
+    <AuthContext.Provider value={{ user, profile, loading, theme, signOut }}>
       {children}
     </AuthContext.Provider>
   );

@@ -15,6 +15,9 @@ import ChatWindow from '../../components/cliente/ChatWindow';
 import FilterPanel, { FilterState } from '../../components/cliente/FilterPanel';
 import { Shop, Service, Appointment } from '../../types';
 import { generateReminderMessage, generateWelcomeMessage } from '../../services/aiService';
+import ClienteLayout from '../../components/cliente/ClienteLayout';
+
+const APPT_STORAGE_KEY = 'steylook_client_appointments';
 
 export default function ClienteHome() {
   const { profile, signOut, theme } = useAuth();
@@ -38,6 +41,8 @@ export default function ClienteHome() {
     onlyAvailable: false
   });
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'home' | 'appointments'>('home');
 
   useEffect(() => {
     if (isDarkMode) {
@@ -84,39 +89,68 @@ export default function ClienteHome() {
     }
   };
 
-  const filteredShops = shops.filter(shop => {
+  const filteredShops = shops.filter((shop) => {
+    const q = searchQuery.toLowerCase().trim();
+    const matchSearch =
+      !q ||
+      shop.name.toLowerCase().includes(q) ||
+      shop.address.toLowerCase().includes(q) ||
+      shop.categories.some((c) => c.toLowerCase().includes(q));
     const matchCategory = filters.category === 'Todos' || shop.categories.includes(filters.category);
     const matchRating = shop.rating >= filters.minRating;
     const matchPrice = shop.priceRange <= filters.maxPrice;
-    const matchType = filters.category === 'Barberías' ? shop.type === 'barberia' : filters.category === 'Salones de Belleza' ? shop.type === 'salon' : true;
-    
-    return matchCategory && matchRating && matchPrice && matchType;
+    const matchType =
+      filters.category === 'Barberías'
+        ? shop.type === 'barberia'
+        : filters.category === 'Salones de Belleza'
+          ? shop.type === 'salon'
+          : true;
+    return matchSearch && matchCategory && matchRating && matchPrice && matchType;
   });
 
+  const loadLocalAppointments = (): Appointment[] => {
+    try {
+      const raw = localStorage.getItem(APPT_STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as Appointment[]) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const saveLocalAppointments = (list: Appointment[]) => {
+    localStorage.setItem(APPT_STORAGE_KEY, JSON.stringify(list));
+  };
+
   const fetchAppointments = async () => {
-    if (!auth.currentUser) return;
+    const local = loadLocalAppointments();
+    if (!auth.currentUser) {
+      setAppointments(local);
+      return;
+    }
     try {
       const q = query(
         collection(db, 'appointments'),
         where('clientId', '==', auth.currentUser.uid),
-        orderBy('createdAt', 'desc')
+        orderBy('createdAt', 'desc'),
       );
       const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
-      setAppointments(data);
-      
-      // Simulate an AI notification if there's a pending appointment
-      if (data.some(a => a.status === 'pending')) {
-        const pending = data.find(a => a.status === 'pending')!;
-        generateReminderMessage(profile?.nombre || 'Cliente', pending.shopName, pending.serviceName, '1 hora').then(msg => {
-          setTimeout(() => {
-            setNotification(msg);
-            setTimeout(() => setNotification(null), 10000);
-          }, 3000);
-        });
+      const data = snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as Appointment));
+      const merged = data.length > 0 ? data : local;
+      setAppointments(merged);
+      if (merged.some((a) => a.status === 'pending')) {
+        const pending = merged.find((a) => a.status === 'pending')!;
+        generateReminderMessage(profile?.nombre || 'Cliente', pending.shopName, pending.serviceName, '1 hora').then(
+          (msg) => {
+            setTimeout(() => {
+              setNotification(msg);
+              setTimeout(() => setNotification(null), 10000);
+            }, 3000);
+          },
+        );
       }
     } catch (err) {
-      console.error("Error fetching appointments:", err);
+      console.error('Error fetching appointments:', err);
+      setAppointments(local);
     }
   };
 
@@ -140,38 +174,56 @@ export default function ClienteHome() {
     if (!selectedShop || !selectedService || !bookingDate || !bookingTime || !profile) return;
     
     const appointmentsPath = 'appointments';
+    const newAppt: Appointment = {
+      id: `local-${Date.now()}`,
+      clientId: auth.currentUser?.uid || 'guest',
+      clientName: profile.nombre,
+      providerId: selectedShop.id,
+      shopId: selectedShop.id,
+      shopName: selectedShop.name,
+      serviceId: selectedService.id,
+      serviceName: selectedService.name,
+      date: bookingDate.toISOString(),
+      status: 'pending',
+      price: selectedService.price,
+      createdAt: new Date().toISOString(),
+    };
+
     try {
-      await addDoc(collection(db, appointmentsPath), {
-        clientId: auth.currentUser?.uid || 'guest',
-        clientName: profile.nombre,
-        shopId: selectedShop.id,
-        shopName: selectedShop.name,
-        serviceId: selectedService.id,
-        serviceName: selectedService.name,
-        date: bookingDate.toISOString(),
-        time: bookingTime,
-        status: 'pending',
-        price: selectedService.price,
-        createdAt: serverTimestamp()
-      });
-      
-      setBookingStatus('success');
-      setTimeout(() => {
-        setBookingStatus('idle');
-        setSelectedShop(null);
-        setSelectedService(null);
-        setBookingDate(null);
-        setBookingTime('');
-        fetchAppointments();
-      }, 3000);
+      if (auth.currentUser) {
+        await addDoc(collection(db, appointmentsPath), {
+          clientId: auth.currentUser.uid,
+          clientName: profile.nombre,
+          shopId: selectedShop.id,
+          shopName: selectedShop.name,
+          serviceId: selectedService.id,
+          serviceName: selectedService.name,
+          date: bookingDate.toISOString(),
+          time: bookingTime,
+          status: 'pending',
+          price: selectedService.price,
+          createdAt: serverTimestamp(),
+        });
+      }
     } catch (err) {
-      console.error("Home: Error al crear cita", err);
-      setBookingStatus('success');
-      fetchAppointments();
+      console.warn('Firestore booking fallback to local:', err);
     }
+
+    const updated = [{ ...newAppt, time: bookingTime }, ...appointments];
+    saveLocalAppointments(updated);
+    setAppointments(updated);
+    setBookingStatus('success');
+    setTimeout(() => {
+      setBookingStatus('idle');
+      setSelectedShop(null);
+      setSelectedService(null);
+      setBookingDate(null);
+      setBookingTime('');
+    }, 3000);
   };
 
   const resetHome = () => {
+    setActiveTab('home');
     setSelectedShop(null);
     setSelectedService(null);
     setBookingDate(null);
@@ -188,7 +240,13 @@ export default function ClienteHome() {
   const currentThemeClasses = "text-theme-primary bg-theme-secondary/20 border border-theme-secondary/30";
 
   return (
-    <div className="min-h-screen bg-theme-bg text-theme-text pb-24 font-sans transition-colors duration-500">
+    <ClienteLayout
+      isDarkMode={isDarkMode}
+      onToggleDark={() => setIsDarkMode(!isDarkMode)}
+      onResetHome={resetHome}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+    >
       {/* AI Notifications */}
       <AnimatePresence>
         {notification && (
@@ -196,7 +254,7 @@ export default function ClienteHome() {
             initial={{ opacity: 0, x: 100 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 100 }}
-            className="fixed top-24 right-6 z-50 max-w-sm"
+            className="fixed top-20 left-4 right-4 sm:left-auto sm:right-6 z-50 sm:max-w-sm"
           >
             <div className="bg-zinc-900 border border-zinc-800 text-white p-6 rounded-[2rem] shadow-2xl flex gap-4">
               <div className="bg-theme-primary rounded-full p-3 h-fit">
@@ -214,49 +272,46 @@ export default function ClienteHome() {
         )}
       </AnimatePresence>
 
-      {/* Header */}
-      <header className="sticky top-0 z-30 bg-theme-bg/80 backdrop-blur-xl border-b border-theme-secondary/20 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <button onClick={() => window.location.href = '/'} className="flex items-center gap-3 font-poppins hover:opacity-80 transition-opacity">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white bg-theme-primary shadow-lg shadow-theme-primary/20 transition-all">
-              <Star className="w-5 h-5 fill-current" />
+      {activeTab === 'appointments' ? (
+        <section className="space-y-8">
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-theme-text">Mis citas</h2>
+            <p className="text-zinc-500 font-medium mt-1">Próximas, pasadas y valoraciones</p>
+          </motion.div>
+          {appointments.length === 0 ? (
+            <div className="text-center py-16 sm:py-24 bg-white dark:bg-zinc-900 rounded-[2rem] sm:rounded-[3rem] border border-theme-secondary/10">
+              <Calendar className="w-12 h-12 text-zinc-300 mx-auto mb-4" />
+              <p className="font-bold text-zinc-600 dark:text-zinc-300">Aún no tienes citas</p>
+              <p className="text-sm text-zinc-400 mt-2 mb-6">Explora locales y reserva tu primera cita</p>
+              <button type="button" onClick={() => setActiveTab('home')} className="px-6 py-3 rounded-2xl bg-theme-primary text-white text-xs font-black uppercase tracking-widest">Explorar locales</button>
             </div>
-            <div className="text-left">
-              <h1 className="text-sm font-black tracking-tight text-theme-text">STEYLOOK</h1>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-theme-secondary">
-                {theme === 'feminine' ? 'Dama Elegante' : theme === 'masculine' ? 'Caballero Moderno' : 'Cliente Premium'}
-              </p>
+          ) : (
+            <div className="space-y-4">
+              {appointments.map((app) => (
+                <motion.div key={app.id} layout className="p-5 sm:p-8 rounded-[1.75rem] sm:rounded-[2.5rem] bg-white dark:bg-zinc-900 border border-theme-secondary/10 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-center gap-4 sm:gap-6 min-w-0">
+                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center text-2xl sm:text-3xl shrink-0">{app.shopName.toLowerCase().includes('barber') ? '💈' : '✂️'}</div>
+                    <div className="min-w-0">
+                      <h4 className="font-black text-lg sm:text-xl text-zinc-900 dark:text-white truncate">{app.shopName}</h4>
+                      <p className="text-sm text-theme-secondary font-bold flex items-center gap-2 mt-1"><Calendar className="w-4 h-4 shrink-0" />{format(new Date(app.date), 'EEEE d MMMM', { locale: es })}</p>
+                      {app.serviceName && <p className="text-xs text-zinc-400 mt-1 truncate">{app.serviceName}</p>}
+                    </div>
+                  </div>
+                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 sm:text-right border-t sm:border-t-0 pt-3 sm:pt-0 border-theme-secondary/10">
+                    <div className="text-xl sm:text-2xl font-black text-theme-primary">{app.time || '10:00'}</div>
+                    <div className={cn('px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest', app.status === 'cancelled' ? 'bg-red-100 text-red-600' : app.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-theme-secondary/10 text-theme-secondary')}>
+                      {app.status === 'pending' ? 'Pendiente' : app.status === 'completed' ? 'Completada' : app.status === 'cancelled' ? 'Cancelada' : 'Confirmada'}
+                    </div>
+                    {app.status === 'completed' && <button type="button" onClick={() => setShowReviewForm(app.id)} className="text-[10px] font-black uppercase tracking-widest text-theme-primary">Valorar</button>}
+                  </div>
+                </motion.div>
+              ))}
             </div>
-          </button>
-          
-          <nav className="hidden md:flex items-center gap-1">
-            <button onClick={resetHome} className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-theme-secondary hover:bg-theme-primary/5 transition-all">
-              Inicio
-            </button>
-            <button onClick={() => window.location.href = '/'} className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-theme-primary hover:bg-theme-primary/5 transition-all">
-              Página Principal
-            </button>
-          </nav>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => setIsDarkMode(!isDarkMode)} 
-            className="p-2.5 rounded-xl bg-theme-secondary/10 text-theme-secondary hover:bg-theme-secondary/20 transition-all hidden sm:block"
-          >
-            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
-          <div className="text-right hidden sm:block">
-            <p className="text-sm font-bold leading-tight">{profile?.nombre}</p>
-            <p className="text-[10px] text-theme-secondary font-medium uppercase tracking-tighter">Mi Cuenta</p>
-          </div>
-          <button onClick={signOut} className="p-2.5 rounded-xl bg-theme-secondary/10 text-theme-secondary hover:bg-red-50 hover:text-red-500 transition-all">
-            <LogOut className="w-5 h-5" />
-          </button>
-        </div>
-      </header>
+          )}
+        </section>
+      ) : (
+        <>
 
-      <main className="px-6 py-10 max-w-7xl mx-auto">
         {/* Welcome Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -266,7 +321,7 @@ export default function ClienteHome() {
           <div className={`inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4 ${currentThemeClasses}`}>
             Bienvenido de nuevo
           </div>
-          <h2 className="text-4xl font-black tracking-tight mb-2 text-theme-text">Hola, {profile?.nombre?.split(' ')[0]} 👋</h2>
+          <h2 className="text-3xl sm:text-4xl font-black tracking-tight mb-2 text-theme-text">Hola, {profile?.nombre?.split(' ')[0]} 👋</h2>
           <p className="text-zinc-500 font-medium italic">Encuentra tu próximo cambio de look.</p>
         </motion.div>
 
@@ -274,10 +329,12 @@ export default function ClienteHome() {
         <div className="flex flex-col sm:flex-row gap-4 mb-12">
           <div className="relative flex-1">
             <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-theme-secondary" />
-            <input 
-              type="text" 
-              placeholder="Buscar barbero, salón o tratamiento..." 
-              className="w-full bg-white border border-theme-secondary/20 rounded-[1.8rem] py-5 pl-14 pr-8 focus:outline-none focus:ring-4 focus:ring-theme-primary/10 transition-all font-medium text-lg shadow-sm"
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar barbería, salón o tratamiento..."
+              className="w-full bg-white dark:bg-zinc-900 border border-theme-secondary/20 rounded-2xl sm:rounded-[1.8rem] py-4 sm:py-5 pl-12 sm:pl-14 pr-4 focus:outline-none focus:ring-4 focus:ring-theme-primary/10 font-medium shadow-sm"
             />
           </div>
           <button 
@@ -300,7 +357,7 @@ export default function ClienteHome() {
             <h3 className="text-xs font-black uppercase text-theme-secondary tracking-[0.3em] mb-6">Mis Próximas Citas</h3>
             <div className="space-y-4">
               {appointments.filter(a => a.status !== 'completed' && a.status !== 'cancelled').map(app => (
-                <div key={app.id} className="p-8 rounded-[2.5rem] bg-white border border-theme-secondary/10 shadow-sm flex items-center justify-between group hover:shadow-xl transition-all">
+                <div key={app.id} className="p-5 sm:p-8 rounded-[1.75rem] sm:rounded-[2.5rem] bg-white dark:bg-zinc-900 border border-theme-secondary/10 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 group hover:shadow-xl transition-all">
                   <div className="flex items-center gap-6">
                     <div className="w-16 h-16 rounded-[1.5rem] bg-zinc-50 flex items-center justify-center text-3xl shadow-inner group-hover:scale-110 transition-transform">
                       {app.shopName.includes('Barber') ? '💈' : '✂️'}
@@ -389,7 +446,7 @@ export default function ClienteHome() {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 lg:gap-10">
                 {filteredShops.map((shop, i) => (
                   <motion.div
                     key={shop.id}
@@ -447,7 +504,8 @@ export default function ClienteHome() {
             )}
           </div>
         </div>
-      </main>
+        </>
+      )}
 
       {/* Booking Modal */}
       <AnimatePresence>
@@ -638,7 +696,7 @@ export default function ClienteHome() {
             initial={{ opacity: 0, y: 100 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 100 }}
-            className="fixed bottom-10 left-6 right-6 z-[100] flex justify-center pointer-events-none"
+            className="fixed bottom-24 sm:bottom-10 left-4 right-4 sm:left-6 sm:right-6 z-[100] flex justify-center pointer-events-none"
           >
             <div className="bg-zinc-900 text-white px-10 py-6 rounded-[3rem] flex items-center gap-6 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
               <div className="bg-green-500 rounded-full p-3 animate-bounce">
@@ -665,27 +723,6 @@ export default function ClienteHome() {
         )}
       </AnimatePresence>
 
-      {/* Mobile Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-2xl border-t border-zinc-100 px-10 py-6 sm:hidden shadow-[0_-10px_30px_rgba(0,0,0,0.03)] flex justify-between items-center z-40">
-        <button 
-          onClick={resetHome}
-          className={cn("transition-all duration-300", theme === 'feminine' ? 'text-pink-500' : theme === 'masculine' ? 'text-zinc-900' : 'text-theme-primary')}
-        >
-          <Star className="w-8 h-8 fill-current" />
-        </button>
-        <button onClick={() => window.location.href = '/'} className="text-zinc-300 hover:text-zinc-900 transition-colors flex flex-col items-center">
-          <ArrowLeft className="w-8 h-8" />
-          <span className="text-[8px] font-black uppercase mt-1">Inicio</span>
-        </button>
-        <button className="text-zinc-300 hover:text-zinc-900 transition-colors"><Calendar className="w-8 h-8" /></button>
-        <button 
-          onClick={() => setIsDarkMode(!isDarkMode)} 
-          className="text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors"
-        >
-          {isDarkMode ? <Sun className="w-8 h-8" /> : <Moon className="w-8 h-8" />}
-        </button>
-        <button className="text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors"><User className="w-8 h-8" /></button>
-      </nav>
-    </div>
+    </ClienteLayout>
   );
 }

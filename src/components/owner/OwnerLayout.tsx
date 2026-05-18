@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../../context/AuthContext';
+import { useOwnerData } from '../../context/OwnerDataContext';
 import {
   LayoutDashboard, Calendar, CalendarCheck, Users, UserCog,
   Scissors, Clock, CreditCard, BarChart3, Star, Tag, Settings,
@@ -26,13 +27,13 @@ type SectionId = 'dashboard'|'calendario'|'citas'|'clientes'|'empleados'|
                  'servicios'|'horarios'|'pagos'|'estadisticas'|'reseñas'|
                  'promociones'|'configuracion';
 
-const NAV_ITEMS: { id: SectionId; label: string; icon: React.ElementType; badge?: number }[] = [
+const NAV_ITEMS: { id: SectionId; label: string; icon: React.ElementType; badgeKey?: 'citas' | 'servicios' }[] = [
   { id:'dashboard',    label:'Dashboard',    icon: LayoutDashboard },
   { id:'calendario',   label:'Calendario',   icon: Calendar        },
-  { id:'citas',        label:'Citas',         icon: CalendarCheck,   badge: 3 },
+  { id:'citas',        label:'Citas',         icon: CalendarCheck,   badgeKey: 'citas' },
   { id:'clientes',     label:'Clientes',      icon: Users           },
   { id:'empleados',    label:'Empleados',     icon: UserCog         },
-  { id:'servicios',    label:'Servicios',     icon: Scissors,        badge: 5 },
+  { id:'servicios',    label:'Servicios',     icon: Scissors,        badgeKey: 'servicios' },
   { id:'horarios',     label:'Horarios',      icon: Clock           },
   { id:'pagos',        label:'Pagos',         icon: CreditCard      },
   { id:'estadisticas', label:'Estadísticas',  icon: BarChart3       },
@@ -43,8 +44,10 @@ const NAV_ITEMS: { id: SectionId; label: string; icon: React.ElementType; badge?
 
 export default function OwnerLayout({ role }: Props) {
   const { profile, signOut } = useAuth();
+  const { pendingCount, appointments, settings } = useOwnerData();
   const [active, setActive]   = useState<SectionId>('dashboard');
   const [sidebar, setSidebar] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
   
   const lsKey = `steylook_palette_${role}`;
   const [paletteId, setPaletteId] = useState<string>(() => localStorage.getItem(lsKey) || '');
@@ -59,8 +62,22 @@ export default function OwnerLayout({ role }: Props) {
   const navigate = (id: string) => {
     setActive(id as SectionId);
     setSidebar(false);
+    setNotifOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const pendingRequests = useMemo(
+    () => appointments.filter((a) => a.status === 'pending').slice(0, 5),
+    [appointments],
+  );
+
+  const navBadges = useMemo(
+    () => ({
+      citas: pendingCount,
+      servicios: appointments.filter((a) => a.status === 'pending').length,
+    }),
+    [pendingCount, appointments],
+  );
 
   const renderSection = () => {
     const props = { theme: t, onNavigate: navigate };
@@ -68,7 +85,7 @@ export default function OwnerLayout({ role }: Props) {
       case 'dashboard':    return <DashboardView    {...props} />;
       case 'calendario':   return <CalendarioView   theme={t} />;
       case 'citas':        return <CitasView        theme={t} />;
-      case 'clientes':     return <ClientesView     theme={t} />;
+      case 'clientes':     return <ClientesView     theme={t} onNavigate={navigate} />;
       case 'empleados':    return <EmpleadosView    theme={t} />;
       case 'servicios':    return <ServiciosView    theme={t} />;
       case 'horarios':     return <HorariosView     theme={t} />;
@@ -127,10 +144,10 @@ export default function OwnerLayout({ role }: Props) {
               }}>
               <item.icon size={18} />
               <span className="text-sm font-bold flex-1 text-left">{item.label}</span>
-              {item.badge && !isActive && (
-                <span className="text-[10px] font-black px-2 py-0.5 rounded-full"
+              {item.badgeKey && navBadges[item.badgeKey] > 0 && !isActive && (
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full min-w-[20px] text-center"
                   style={{ background: t.accentLight, color: t.accent }}>
-                  {item.badge}
+                  {navBadges[item.badgeKey]}
                 </span>
               )}
               {isActive && <ChevronRight size={14} />}
@@ -198,12 +215,54 @@ export default function OwnerLayout({ role }: Props) {
               </p>
             </div>
           </div>
-          <button className="p-2 rounded-xl relative transition-all hover:scale-110"
-            style={{ background: t.accentLight, color: t.accent }}>
-            <Bell size={18} />
-            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center"
-              style={{ background: t.accent, color:'#fff' }}>3</span>
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setNotifOpen(!notifOpen)}
+              className="p-2 rounded-xl relative transition-all hover:scale-110"
+              style={{ background: t.accentLight, color: t.accent }}
+            >
+              <Bell size={18} />
+              {pendingCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center"
+                  style={{ background: t.accent, color: '#fff' }}>
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+            <AnimatePresence>
+              {notifOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                  className="absolute right-0 top-full mt-2 w-80 rounded-2xl shadow-2xl overflow-hidden z-50"
+                  style={{ background: t.isDark ? '#1a1a1a' : '#fff', border: `1px solid ${t.border}` }}
+                >
+                  <div className="p-4" style={{ borderBottom: `1px solid ${t.border}` }}>
+                    <p style={{ color: t.text }} className="font-black text-sm">Notificaciones</p>
+                    <p style={{ color: t.textMuted }} className="text-[10px] font-bold">{settings.shopName}</p>
+                  </div>
+                  {pendingRequests.length === 0 ? (
+                    <p style={{ color: t.textMuted }} className="p-6 text-sm text-center">Todo al día ✓</p>
+                  ) : (
+                    <motion.div className="max-h-64 overflow-y-auto">
+                      {pendingRequests.map((a) => (
+                        <button
+                          key={a.id}
+                          onClick={() => navigate('citas')}
+                          className="w-full text-left p-4 hover:bg-white/5 transition-colors"
+                          style={{ borderBottom: `1px solid ${t.border}` }}
+                        >
+                          <p style={{ color: t.text }} className="text-sm font-bold">{a.clientName}</p>
+                          <p style={{ color: t.textMuted }} className="text-xs">{a.service} · {a.time}</p>
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </header>
 
         {/* Page content */}
