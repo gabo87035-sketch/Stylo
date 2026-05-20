@@ -87,6 +87,8 @@ export interface OwnerSettings {
   notifEmail: boolean;
   notifWhatsapp: boolean;
   notifSMS: boolean;
+  profileImage?: string;  // Firebase Storage download URL
+  coverImage?: string;    // Firebase Storage download URL
 }
 
 export interface BlockedSlot {

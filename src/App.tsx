@@ -6,6 +6,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import InstallPrompt from './components/InstallPrompt';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -70,7 +71,7 @@ export default function App() {
             <Route path="/register" element={<Register />} />
 
             <Route path="/cliente" element={
-              <ProtectedRoute allowedRoles={['cliente']}>
+              <ProtectedRoute allowedRoles={['cliente', 'barbero', 'salonera']}>
                 <ClienteHome />
               </ProtectedRoute>
             } />
@@ -88,6 +89,9 @@ export default function App() {
             } />
           </Routes>
         </Router>
+
+        {/* PWA install prompt — floats above all content */}
+        <InstallPrompt />
       </ThemeWrapper>
     </AuthProvider>
   );

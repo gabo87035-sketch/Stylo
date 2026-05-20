@@ -5,7 +5,7 @@ import { useOwnerData } from '../../context/OwnerDataContext';
 import {
   LayoutDashboard, Calendar, CalendarCheck, Users, UserCog,
   Scissors, Clock, CreditCard, BarChart3, Star, Tag, Settings,
-  LogOut, Menu, X, ChevronRight, Sparkles, Bell,
+  LogOut, Menu, X, ChevronRight, Sparkles, Bell, Globe,
 } from 'lucide-react';
 import { OwnerRole, getTheme } from './ownerTheme';
 import DashboardView    from './sections/DashboardView';
@@ -156,9 +156,17 @@ export default function OwnerLayout({ role }: Props) {
         })}
       </nav>
 
+      {/* Switch to client view */}
+      <button onClick={() => window.location.href = '/cliente'}
+        className="flex items-center gap-3 px-3 py-3 rounded-xl mt-4 transition-all hover:scale-[1.02] group"
+        style={{ color: t.text }}>
+        <Globe size={18} />
+        <span className="text-sm font-bold">Ver como Cliente</span>
+      </button>
+
       {/* Sign out */}
       <button onClick={signOut}
-        className="flex items-center gap-3 px-3 py-3 rounded-xl mt-4 transition-all hover:scale-[1.02] group"
+        className="flex items-center gap-3 px-3 py-3 rounded-xl mt-2 transition-all hover:scale-[1.02] group"
         style={{ color: '#ef4444' }}>
         <LogOut size={18} />
         <span className="text-sm font-bold">Cerrar Sesión</span>
